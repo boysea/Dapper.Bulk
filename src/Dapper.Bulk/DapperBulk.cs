@@ -344,9 +344,9 @@ public static class DapperBulk
     }
 
     private static (string identityInsertOn, string identityInsertOff, SqlBulkCopyOptions bulkCopyOptions)
-        GetIdentityInsertOptions(bool identityInsert, string tableName)
-        => identityInsert
-            ? ($"SET IDENTITY_INSERT {FormatTableName(tableName)} ON",
-                $"SET IDENTITY_INSERT {FormatTableName(tableName)} OFF", SqlBulkCopyOptions.KeepIdentity)
-            : (string.Empty, string.Empty, SqlBulkCopyOptions.Default);
+        GetIdentityInsertOptions(bool identityInsert, string tableName)=> (string.Empty, string.Empty, SqlBulkCopyOptions.Default);
+        //=> identityInsert
+        //    ? ($"SET IDENTITY_INSERT {FormatTableName(tableName)} ON",
+        //        $"SET IDENTITY_INSERT {FormatTableName(tableName)} OFF", SqlBulkCopyOptions.KeepIdentity)
+        //    : (string.Empty, string.Empty, SqlBulkCopyOptions.Default);
 }
