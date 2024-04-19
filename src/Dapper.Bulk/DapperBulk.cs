@@ -22,14 +22,15 @@ public static class DapperBulk
     /// <typeparam name="T">The type being inserted.</typeparam>
     /// <param name="connection">Open SqlConnection</param>
     /// <param name="data">Entities to insert</param>
+    /// <param name="tableName">TableName</param>
     /// <param name="transaction">The transaction to run under, null (the default) if none</param>
     /// <param name="batchSize">Number of bulk items inserted together, 0 (the default) if all</param>
     /// <param name="bulkCopyTimeout">Number of seconds before bulk command execution timeout, 30 (the default)</param>
     /// <param name="identityInsert">Usage of db generated ids. By default DB generated IDs are used (identityInsert=false)</param>
-    public static void BulkInsert<T>(this SqlConnection connection, IEnumerable<T> data, SqlTransaction transaction = null, int batchSize = 0, int bulkCopyTimeout = 30, bool identityInsert = false)
+    public static void BulkInsert<T>(this SqlConnection connection, IEnumerable<T> data, string tableName, SqlTransaction transaction = null, int batchSize = 0, int bulkCopyTimeout = 30, bool identityInsert = false)
     {
         var type = typeof(T);
-        BulkInsert(connection,type,data.Cast<object>(),transaction,batchSize,bulkCopyTimeout,identityInsert);
+        BulkInsert(connection, type, data.Cast<object>(), tableName, transaction, batchSize, bulkCopyTimeout, identityInsert);
     }
 
     /// <summary>
@@ -39,25 +40,26 @@ public static class DapperBulk
     /// <param name="connection">Open SqlConnection</param>
     /// <param name="type">The type being inserted.</param>
     /// <param name="data">Entities to insert</param>
+    /// <param name="tableName">TableName</param>
     /// <param name="transaction">The transaction to run under, null (the default) if none</param>
     /// <param name="batchSize">Number of bulk items inserted together, 0 (the default) if all</param>
     /// <param name="bulkCopyTimeout">Number of seconds before bulk command execution timeout, 30 (the default)</param>
     /// <param name="identityInsert">Usage of db generated ids. By default DB generated IDs are used (identityInsert=false)</param>
-    public static void BulkInsert(this SqlConnection connection, Type type, IEnumerable<object> data, SqlTransaction transaction = null, int batchSize = 0, int bulkCopyTimeout = 30, bool identityInsert = false)
-    { 
-        var tableName = TableMapper.GetTableName(type);
+    public static void BulkInsert(this SqlConnection connection, Type type, IEnumerable<object> data, string tableName, SqlTransaction transaction = null, int batchSize = 0, int bulkCopyTimeout = 30, bool identityInsert = false)
+    {
+        tableName = string.IsNullOrWhiteSpace(tableName) ? TableMapper.GetTableName(type) : tableName;
         var allProperties = PropertiesCache.TypePropertiesCache(type);
         var keyProperties = PropertiesCache.KeyPropertiesCache(type);
         var computedProperties = PropertiesCache.ComputedPropertiesCache(type);
         var columns = PropertiesCache.GetColumnNamesCache(type);
 
         var insertProperties = allProperties.Except(computedProperties).ToList();
-        
+
         if (!identityInsert)
             insertProperties = insertProperties.Except(keyProperties).ToList();
 
         var (identityInsertOn, identityInsertOff, sqlBulkCopyOptions) = GetIdentityInsertOptions(identityInsert, tableName);
-        
+
         var insertPropertiesString = GetColumnsStringSqlServer(insertProperties, columns);
         var tempToBeInserted = $"#TempInsert_{tableName}".Replace(".", string.Empty);
 
@@ -85,15 +87,16 @@ public static class DapperBulk
     /// <typeparam name="T">The element type of the array</typeparam>
     /// <param name="connection">Open SqlConnection</param>
     /// <param name="data">Entities to insert</param>
+    /// <param name="tableName">TableName</param>
     /// <param name="transaction">The transaction to run under, null (the default) if none</param>
     /// <param name="batchSize">Number of bulk items inserted together, 0 (the default) if all</param>
     /// <param name="bulkCopyTimeout">Number of seconds before bulk command execution timeout, 30 (the default)</param>
     /// <param name="identityInsert">Usage of db generated ids. By default DB generated IDs are used (identityInsert=false)</param>
     /// <returns>Inserted entities</returns>
-    public static IEnumerable<T> BulkInsertAndSelect<T>(this SqlConnection connection, IEnumerable<T> data, SqlTransaction transaction = null, int batchSize = 0, int bulkCopyTimeout = 30, bool identityInsert = false)
+    public static IEnumerable<T> BulkInsertAndSelect<T>(this SqlConnection connection, IEnumerable<T> data, string tableName, SqlTransaction transaction = null, int batchSize = 0, int bulkCopyTimeout = 30, bool identityInsert = false)
     {
         var type = typeof(T);
-        var tableName = TableMapper.GetTableName(type);
+        tableName = string.IsNullOrWhiteSpace(tableName) ? TableMapper.GetTableName(type) : tableName;
         var allProperties = PropertiesCache.TypePropertiesCache(type);
         var keyProperties = PropertiesCache.KeyPropertiesCache(type);
         var computedProperties = PropertiesCache.ComputedPropertiesCache(type);
@@ -102,18 +105,18 @@ public static class DapperBulk
         if (keyProperties.Count == 0)
         {
             var dataList = data.ToList();
-            connection.BulkInsert(dataList, transaction, batchSize, bulkCopyTimeout);
+            connection.BulkInsert(dataList, tableName, transaction, batchSize, bulkCopyTimeout);
             return dataList;
         }
 
         var insertProperties = allProperties.Except(computedProperties).ToList();
-        
+
         if (!identityInsert)
             insertProperties = insertProperties.Except(keyProperties).ToList();
 
         var (identityInsertOn, identityInsertOff, sqlBulkCopyOptions) = GetIdentityInsertOptions(identityInsert, tableName);
-        
-        var keyPropertiesString = GetColumnsStringSqlServer(keyProperties,columns);
+
+        var keyPropertiesString = GetColumnsStringSqlServer(keyProperties, columns);
         var keyPropertiesInsertedString = GetColumnsStringSqlServer(keyProperties, columns, "inserted.");
         var insertPropertiesString = GetColumnsStringSqlServer(insertProperties, columns);
         var allPropertiesString = GetColumnsStringSqlServer(allProperties, columns, "target.");
@@ -133,7 +136,7 @@ public static class DapperBulk
 
         var table = string.Join(", ", keyProperties.Select(k => $"[{(columns.ContainsKey(k.Name) ? columns[k.Name] : k.Name)}] bigint"));
         var joinOn = string.Join(" AND ", keyProperties.Select(k => $"target.[{(columns.ContainsKey(k.Name) ? columns[k.Name] : k.Name)}] = ins.[{(columns.ContainsKey(k.Name) ? columns[k.Name] : k.Name)}]"));
-        
+
         return connection.Query<T>($@"
                 {identityInsertOn}
                 DECLARE {tempInsertedWithIdentity} TABLE ({table})
@@ -154,27 +157,28 @@ public static class DapperBulk
     /// <typeparam name="T">The type being inserted.</typeparam>
     /// <param name="connection">Open SqlConnection</param>
     /// <param name="data">Entities to insert</param>
+    /// <param name="tableName">TableName</param>
     /// <param name="transaction">The transaction to run under, null (the default) if none</param>
     /// <param name="batchSize">Number of bulk items inserted together, 0 (the default) if all</param>
     /// <param name="bulkCopyTimeout">Number of seconds before bulk command execution timeout, 30 (the default)</param>
     /// <param name="identityInsert">Usage of db generated ids. By default DB generated IDs are used (identityInsert=false)</param>
-    public static async Task BulkInsertAsync<T>(this SqlConnection connection, IEnumerable<T> data, SqlTransaction transaction = null, int batchSize = 0, int bulkCopyTimeout = 30, bool identityInsert = false)
+    public static async Task BulkInsertAsync<T>(this SqlConnection connection, IEnumerable<T> data, string tableName, SqlTransaction transaction = null, int batchSize = 0, int bulkCopyTimeout = 30, bool identityInsert = false)
     {
         var type = typeof(T);
-        var tableName = TableMapper.GetTableName(type);
+        tableName = string.IsNullOrWhiteSpace(tableName) ? TableMapper.GetTableName(type) : tableName;
         var allProperties = PropertiesCache.TypePropertiesCache(type);
         var keyProperties = PropertiesCache.KeyPropertiesCache(type);
         var computedProperties = PropertiesCache.ComputedPropertiesCache(type);
         var columns = PropertiesCache.GetColumnNamesCache(type);
 
         var insertProperties = allProperties.Except(computedProperties).ToList();
-        
+
         if (!identityInsert)
             insertProperties = insertProperties.Except(keyProperties).ToList();
 
         var (identityInsertOn, identityInsertOff, sqlBulkCopyOptions) = GetIdentityInsertOptions(identityInsert, tableName);
-        
-        var insertPropertiesString = GetColumnsStringSqlServer(insertProperties,columns);
+
+        var insertPropertiesString = GetColumnsStringSqlServer(insertProperties, columns);
         var tempToBeInserted = $"#TempInsert_{tableName}".Replace(".", string.Empty);
 
         await connection.ExecuteAsync($@"SELECT TOP 0 {insertPropertiesString} INTO {tempToBeInserted} FROM {FormatTableName(tableName)} target WITH(NOLOCK);", null, transaction);
@@ -202,15 +206,16 @@ public static class DapperBulk
     /// <typeparam name="T">The type being inserted.</typeparam>
     /// <param name="connection">Open SqlConnection</param>
     /// <param name="data">Entities to insert</param>
+    /// <param name="tableName">TableName</param>
     /// <param name="transaction">The transaction to run under, null (the default) if none</param>
     /// <param name="batchSize">Number of bulk items inserted together, 0 (the default) if all</param>
     /// <param name="bulkCopyTimeout">Number of seconds before bulk command execution timeout, 30 (the default)</param>
     /// <param name="identityInsert">Usage of db generated ids. By default DB generated IDs are used (identityInsert=false)</param>
     /// <returns>Inserted entities</returns>
-    public static async Task<IEnumerable<T>> BulkInsertAndSelectAsync<T>(this SqlConnection connection, IEnumerable<T> data, SqlTransaction transaction = null, int batchSize = 0, int bulkCopyTimeout = 30, bool identityInsert = false)
+    public static async Task<IEnumerable<T>> BulkInsertAndSelectAsync<T>(this SqlConnection connection, IEnumerable<T> data, string tableName, SqlTransaction transaction = null, int batchSize = 0, int bulkCopyTimeout = 30, bool identityInsert = false)
     {
         var type = typeof(T);
-        var tableName = TableMapper.GetTableName(type);
+        tableName = string.IsNullOrWhiteSpace(tableName) ? TableMapper.GetTableName(type) : tableName;
         var allProperties = PropertiesCache.TypePropertiesCache(type);
         var keyProperties = PropertiesCache.KeyPropertiesCache(type);
         var computedProperties = PropertiesCache.ComputedPropertiesCache(type);
@@ -219,20 +224,20 @@ public static class DapperBulk
         if (keyProperties.Count == 0)
         {
             var dataList = data.ToList();
-            await connection.BulkInsertAsync(dataList, transaction, batchSize, bulkCopyTimeout);
+            await connection.BulkInsertAsync(dataList, tableName, transaction, batchSize, bulkCopyTimeout);
             return dataList;
         }
 
         var insertProperties = allProperties.Except(computedProperties).ToList();
-        
+
         if (!identityInsert)
             insertProperties = insertProperties.Except(keyProperties).ToList();
 
         var (identityInsertOn, identityInsertOff, sqlBulkCopyOptions) = GetIdentityInsertOptions(identityInsert, tableName);
-     
-        var keyPropertiesString = GetColumnsStringSqlServer(keyProperties,columns);
-        var keyPropertiesInsertedString = GetColumnsStringSqlServer(keyProperties,columns, "inserted.");
-        var insertPropertiesString = GetColumnsStringSqlServer(insertProperties,columns);
+
+        var keyPropertiesString = GetColumnsStringSqlServer(keyProperties, columns);
+        var keyPropertiesInsertedString = GetColumnsStringSqlServer(keyProperties, columns, "inserted.");
+        var insertPropertiesString = GetColumnsStringSqlServer(insertProperties, columns);
         var allPropertiesString = GetColumnsStringSqlServer(allProperties, columns, "target.");
 
         var tempToBeInserted = $"#TempInsert_{tableName}".Replace(".", string.Empty);
@@ -240,7 +245,7 @@ public static class DapperBulk
 
         await connection.ExecuteAsync($@"SELECT TOP 0 {insertPropertiesString} INTO {tempToBeInserted} FROM {FormatTableName(tableName)} target WITH(NOLOCK);", null, transaction);
 
-        using (var bulkCopy = new SqlBulkCopy(connection,sqlBulkCopyOptions, transaction))
+        using (var bulkCopy = new SqlBulkCopy(connection, sqlBulkCopyOptions, transaction))
         {
             bulkCopy.BulkCopyTimeout = bulkCopyTimeout;
             bulkCopy.BatchSize = batchSize;
@@ -272,7 +277,7 @@ public static class DapperBulk
 
         return string.Join(", ", properties.Select(property => $"{tablePrefix}[{columnNames[property.Name]}] "));
     }
-    
+
     private static DataTable ToDataTable<T>(IEnumerable<T> data, IList<PropertyInfo> properties)
     {
         var typeCasts = new Type[properties.Count];
