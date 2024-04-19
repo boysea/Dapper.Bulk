@@ -63,6 +63,11 @@ public static class DapperBulk
         var insertPropertiesString = GetColumnsStringSqlServer(insertProperties, columns);
         var tempToBeInserted = $"#TempInsert_{tableName}".Replace(".", string.Empty);
 
+        if (connection.State != ConnectionState.Open)
+        {
+            connection.Open();
+        }
+
         connection.Execute($@"SELECT TOP 0 {insertPropertiesString} INTO {tempToBeInserted} FROM {FormatTableName(tableName)} target WITH(NOLOCK);", null, transaction);
 
         using (var bulkCopy = new SqlBulkCopy(connection, sqlBulkCopyOptions, transaction))
@@ -124,6 +129,11 @@ public static class DapperBulk
         var tempToBeInserted = $"#TempInsert_{tableName}".Replace(".", string.Empty);
         var tempInsertedWithIdentity = $"@TempInserted_{tableName}".Replace(".", string.Empty);
 
+        if (connection.State != ConnectionState.Open)
+        {
+            connection.Open();
+        }
+
         connection.Execute($"SELECT TOP 0 {insertPropertiesString} INTO {tempToBeInserted} FROM {FormatTableName(tableName)} target WITH(NOLOCK);", null, transaction);
 
         using (var bulkCopy = new SqlBulkCopy(connection, sqlBulkCopyOptions, transaction))
@@ -180,6 +190,11 @@ public static class DapperBulk
 
         var insertPropertiesString = GetColumnsStringSqlServer(insertProperties, columns);
         var tempToBeInserted = $"#TempInsert_{tableName}".Replace(".", string.Empty);
+
+        if (connection.State != ConnectionState.Open)
+        {
+            connection.Open();
+        }
 
         await connection.ExecuteAsync($@"SELECT TOP 0 {insertPropertiesString} INTO {tempToBeInserted} FROM {FormatTableName(tableName)} target WITH(NOLOCK);", null, transaction);
 
@@ -242,6 +257,11 @@ public static class DapperBulk
 
         var tempToBeInserted = $"#TempInsert_{tableName}".Replace(".", string.Empty);
         var tempInsertedWithIdentity = $"@TempInserted_{tableName}".Replace(".", string.Empty);
+
+        if (connection.State != ConnectionState.Open)
+        {
+            connection.Open();
+        }
 
         await connection.ExecuteAsync($@"SELECT TOP 0 {insertPropertiesString} INTO {tempToBeInserted} FROM {FormatTableName(tableName)} target WITH(NOLOCK);", null, transaction);
 
